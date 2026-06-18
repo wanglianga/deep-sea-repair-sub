@@ -1,0 +1,9 @@
+version: '3.8'
+
+services:
+  deep-sea-repair-sub:
+    build: .
+    ports:
+      - "3000:3000"
+    container_name: deep-sea-repair-sub
+    restart: unless-stopped
