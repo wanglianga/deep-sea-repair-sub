@@ -31,9 +31,7 @@ export class Submarine {
     
     const body = this.scene.add.graphics();
     body.fillStyle(COLORS.SUBMARINE_BODY, 1);
-    body.beginPath();
-    body.ellipse(0, 0, 45, 25, 0, 0, Math.PI * 2);
-    body.fillPath();
+    body.fillEllipse(0, 0, 90, 50);
     
     body.fillStyle(COLORS.SUBMARINE_ACCENT, 1);
     body.fillRect(-20, -18, 25, 10);
@@ -62,13 +60,12 @@ export class Submarine {
   }
   
   createLight() {
-    this.light = this.scene.add.pointLight(
+    this.light = this.scene.lights.addLight(
       this.x, this.y,
-      0xffffcc,
       this.lightRange,
+      0xffffcc,
       1
     );
-    this.light.setDepth(50);
   }
   
   createArm() {
@@ -78,6 +75,24 @@ export class Submarine {
   }
   
   createBubbles() {
+    if (!this.scene.textures.exists('bubble')) {
+      const bubbleTex = this.scene.textures.createCanvas('bubble', 16, 16);
+      const bctx = bubbleTex.getContext();
+      const gradient = bctx.createRadialGradient(6, 6, 1, 8, 8, 8);
+      gradient.addColorStop(0, 'rgba(220, 240, 255, 0.9)');
+      gradient.addColorStop(0.5, 'rgba(180, 220, 255, 0.5)');
+      gradient.addColorStop(1, 'rgba(100, 160, 220, 0.1)');
+      bctx.fillStyle = gradient;
+      bctx.beginPath();
+      bctx.arc(8, 8, 7, 0, Math.PI * 2);
+      bctx.fill();
+      bctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+      bctx.beginPath();
+      bctx.arc(6, 5, 2, 0, Math.PI * 2);
+      bctx.fill();
+      bubbleTex.refresh();
+    }
+    
     this.bubbleParticles = this.scene.add.particles(0, 0, 'bubble', {
       speed: { min: 20, max: 40 },
       angle: { min: 160, max: 200 },
@@ -141,8 +156,8 @@ export class Submarine {
     if (this.light) {
       this.light.x = this.x;
       this.light.y = this.y;
-      this.light.setRadius(this.lightOn ? this.lightRange : 30);
-      this.light.setIntensity(this.lightOn ? 1 : 0.2);
+      this.light.radius = this.lightOn ? this.lightRange : 30;
+      this.light.intensity = this.lightOn ? 1 : 0.2;
     }
     
     this.oxygen -= GAME_CONFIG.OXYGEN_DRAIN_RATE * deltaTime / 16;

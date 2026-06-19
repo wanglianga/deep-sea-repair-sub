@@ -64,6 +64,17 @@ export class Environment {
   }
   
   createParticles() {
+    if (!this.scene.textures.exists('particle')) {
+      this.scene.textures.createCanvas('particle', 8, 8);
+      const particleTex = this.scene.textures.get('particle');
+      const pctx = particleTex.getContext();
+      pctx.fillStyle = 'rgba(200, 230, 255, 0.5)';
+      pctx.beginPath();
+      pctx.arc(4, 4, 3, 0, Math.PI * 2);
+      pctx.fill();
+      particleTex.refresh();
+    }
+    
     this.underwaterParticles = this.scene.add.particles(1600, 1200, 'particle', {
       speed: { min: 5, max: 15 },
       angle: { min: -10, max: 10 },
@@ -78,15 +89,6 @@ export class Environment {
       }
     });
     this.underwaterParticles.setDepth(10);
-    
-    this.scene.textures.createCanvas('particle', 8, 8);
-    const particleTex = this.scene.textures.get('particle');
-    const pctx = particleTex.getContext();
-    pctx.fillStyle = 'rgba(200, 230, 255, 0.5)';
-    pctx.beginPath();
-    pctx.arc(4, 4, 3, 0, Math.PI * 2);
-    pctx.fill();
-    particleTex.refresh();
   }
   
   createCurrents() {
@@ -261,11 +263,9 @@ export class Environment {
       
       seaweed.fillStyle(0x338844, 0.8);
       for (let i = 1; i <= 3; i++) {
-        const y = -height * (i / 4);
-        const x = Math.sin(i * 0.8 + pos.x) * 15;
-        seaweed.beginPath();
-        seaweed.ellipse(x + 8, y, 10, 5, 0.3, 0, Math.PI * 2);
-        seaweed.fillPath();
+        const leafY = -height * (i / 4);
+        const leafX = Math.sin(i * 0.8 + pos.x) * 15;
+        seaweed.fillEllipse(leafX + 10, leafY - 2, 20, 10);
       }
       
       seaweed.setPosition(pos.x, pos.y);

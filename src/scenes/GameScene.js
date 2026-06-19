@@ -19,6 +19,9 @@ export class GameScene extends Phaser.Scene {
   }
   
   create() {
+    this.lights.enable();
+    this.lights.setAmbientColor(0x112233);
+    
     this.physics.world.setBounds(0, 0, GAME_CONFIG.WORLD_WIDTH, GAME_CONFIG.WORLD_HEIGHT);
     
     this.cameras.main.setBounds(0, 0, GAME_CONFIG.WORLD_WIDTH, GAME_CONFIG.WORLD_HEIGHT);
@@ -39,9 +42,6 @@ export class GameScene extends Phaser.Scene {
     this.hud = new HUD(this);
     
     this.setupInput();
-    
-    this.lights.enable();
-    this.lights.setAmbientColor(0x112233);
     
     this.damageCooldown = 0;
     

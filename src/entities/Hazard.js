@@ -26,7 +26,7 @@ export class Hazard {
         break;
         
       case 'electric':
-        this.createElectric(graphics);
+        this.createElectricBase(graphics);
         this.damage = 1.2;
         break;
         
@@ -42,6 +42,12 @@ export class Hazard {
     this.graphics = graphics;
     
     if (this.type === 'electric') {
+      const warning = this.scene.add.text(0, 0, '⚡', {
+        fontSize: '32px'
+      }).setOrigin(0.5);
+      this.warningIcon = warning;
+      container.add(warning);
+      
       this.scene.time.addEvent({
         delay: 500,
         callback: this.flashElectric,
@@ -72,7 +78,7 @@ export class Hazard {
     graphics.strokeRect(-this.width / 2, -this.height / 2, this.width, this.height);
   }
   
-  createElectric(graphics) {
+  createElectricBase(graphics) {
     graphics.fillStyle(0xffff00, 0.15);
     graphics.fillRect(-this.width / 2, -this.height / 2, this.width, this.height);
     
@@ -99,12 +105,6 @@ export class Hazard {
     
     graphics.lineStyle(2, 0xffff00, 0.5);
     graphics.strokeRect(-this.width / 2, -this.height / 2, this.width, this.height);
-    
-    const warning = this.scene.add.text(0, 0, '⚡', {
-      fontSize: '32px'
-    }).setOrigin(0.5);
-    this.warningIcon = warning;
-    this.sprite.add(warning);
   }
   
   createLowVisibility(graphics) {
