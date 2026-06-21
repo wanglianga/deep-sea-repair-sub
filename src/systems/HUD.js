@@ -224,11 +224,17 @@ export class HUD {
     bar.setScrollFactor(0);
     bar.setDepth(1000);
     
-    const controlsText = this.scene.add.text(20, 695, 'WASD移动 | 空格机械臂 | L灯', {
+    const controlsText = this.scene.add.text(20, 695, 'WASD移动 | 空格机械臂作业 | E锚点 | L灯', {
       fontSize: '14px',
       color: '#88aacc',
       fontFamily: 'Microsoft YaHei'
     }).setScrollFactor(0).setDepth(1001);
+    
+    this.statusInfoText = this.scene.add.text(1260, 695, '', {
+      fontSize: '13px',
+      color: '#00ff88',
+      fontFamily: 'Microsoft YaHei'
+    }).setOrigin(1, 0).setScrollFactor(0).setDepth(1001);
     
     this.elements.bottomBar = bar;
     this.elements.controlsText = controlsText;
@@ -303,14 +309,15 @@ export class HUD {
     this.elements.dangerText = dangerText;
   }
   
-  update(submarine, tasks, hazards, motherShipPos) {
+  update(submarine, tasks, hazards, motherShipPos, extra = {}) {
     this.updateOxygenBar(submarine.oxygen);
-    this.updatePowerBar(submarine.power);
+    this.updatePowerBar(submarine.power, extra.currentPowerSave || 0);
     this.updatePressureBar(submarine.pressure);
-    this.updateArmBar(submarine.mechanicalArm, submarine.isArmWorking);
+    this.updateArmBar(submarine.mechanicalArm, submarine.isArmWorking, extra.grabbedAnchor);
     this.updateTaskList(tasks);
     this.updateCompass(submarine, motherShipPos);
     this.updateWarnings(submarine, hazards);
+    this.updateAnchorStatus(extra.grabbedAnchor, extra.anchorReturnRisk || 0, extra.currentPowerSave || 0);
   }
   
   updateOxygenBar(value) {
@@ -334,7 +341,7 @@ export class HUD {
     }
   }
   
-  updatePowerBar(value) {
+  updatePowerBar(value, powerSave = 0) {
     const pw = this.elements.power;
     const percent = Math.max(0, Math.min(100, value));
     const width = 126 * (percent / 100);
@@ -345,9 +352,18 @@ export class HUD {
     
     pw.barFill.fillStyle(color, 1);
     pw.barFill.fillRect(72, 132, width, 16);
+    
+    if (powerSave > 0) {
+      const saveWidth = 126 * Math.min(powerSave, 0.7);
+      pw.barFill.fillStyle(0x00ff88, 0.6);
+      pw.barFill.fillRect(72 + width, 132, saveWidth, 16);
+    }
+    
     pw.valueText.setText(`${Math.floor(percent)}%`);
     
-    if (percent < 20 && Math.floor(this.scene.time.now / 300) % 2 === 0) {
+    if (powerSave > 0.1) {
+      pw.valueText.setColor('#00ff88');
+    } else if (percent < 20 && Math.floor(this.scene.time.now / 300) % 2 === 0) {
       pw.valueText.setColor('#ff0000');
     } else {
       pw.valueText.setColor(percent < 20 ? '#ff6666' : '#ffdd00');
@@ -374,7 +390,7 @@ export class HUD {
     }
   }
   
-  updateArmBar(value, isWorking) {
+  updateArmBar(value, isWorking, grabbedAnchor = null) {
     const arm = this.elements.arm;
     const percent = Math.max(0, Math.min(100, value));
     const width = 126 * (percent / 100);
@@ -384,7 +400,10 @@ export class HUD {
     arm.barFill.fillRect(72, 222, width, 16);
     arm.valueText.setText(`${Math.floor(percent)}%`);
     
-    if (isWorking) {
+    if (grabbedAnchor) {
+      arm.statusText.setText('状态：锚定中');
+      arm.statusText.setColor('#ffaa00');
+    } else if (isWorking) {
       arm.statusText.setText('状态：工作中');
       arm.statusText.setColor('#00ff88');
     } else {
@@ -484,6 +503,38 @@ export class HUD {
       this.dangerIndicators.forEach(indicator => {
         indicator.sprite.visible = false;
       });
+    }
+  }
+  
+  updateAnchorStatus(grabbedAnchor, anchorReturnRisk, currentPowerSave) {
+    if (!this.statusInfoText) return;
+    
+    let statusParts = [];
+    
+    if (grabbedAnchor) {
+      statusParts.push(`⚓ ${grabbedAnchor.name}`);
+    }
+    
+    if (currentPowerSave > 0.1) {
+      const savePercent = Math.floor(currentPowerSave * 100);
+      statusParts.push(`⚡ 省电 +${savePercent}%`);
+    }
+    
+    if (anchorReturnRisk > 0.01) {
+      const riskPercent = Math.floor(anchorReturnRisk * 100);
+      statusParts.push(`⚠ 风险 ${riskPercent}%`);
+    }
+    
+    this.statusInfoText.setText(statusParts.join('  |  '));
+    
+    if (anchorReturnRisk > 0.3) {
+      this.statusInfoText.setColor('#ff4444');
+    } else if (anchorReturnRisk > 0.1) {
+      this.statusInfoText.setColor('#ffaa00');
+    } else if (currentPowerSave > 0.1) {
+      this.statusInfoText.setColor('#00ff88');
+    } else {
+      this.statusInfoText.setColor('#88aacc');
     }
   }
   

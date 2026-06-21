@@ -1,4 +1,4 @@
-import { COLORS } from '../config/constants.js';
+import { GAME_CONFIG, COLORS } from '../config/constants.js';
 
 export class Environment {
   constructor(scene) {
@@ -93,11 +93,14 @@ export class Environment {
   
   createCurrents() {
     const currentConfigs = [
-      { x: 800, y: 600, width: 400, height: 200, dirX: 1, dirY: 0, strength: 0.3 },
-      { x: 1600, y: 1000, width: 300, height: 350, dirX: -0.8, dirY: 0.3, strength: 0.25 },
-      { x: 2400, y: 800, width: 350, height: 250, dirX: 0.6, dirY: 0.5, strength: 0.35 },
-      { x: 1200, y: 1800, width: 500, height: 200, dirX: -1, dirY: 0.1, strength: 0.28 },
-      { x: 2000, y: 1600, width: 280, height: 300, dirX: 0.5, dirY: -0.6, strength: 0.3 }
+      { x: 800, y: 600, width: 400, height: 200, dirX: 1, dirY: 0, strength: 0.3, isTrench: false },
+      { x: 1600, y: 1000, width: 300, height: 350, dirX: -0.8, dirY: 0.3, strength: 0.25, isTrench: false },
+      { x: 2400, y: 800, width: 350, height: 250, dirX: 0.6, dirY: 0.5, strength: 0.35, isTrench: false },
+      { x: 1200, y: 1800, width: 500, height: 200, dirX: -1, dirY: 0.1, strength: 0.28, isTrench: false },
+      { x: 2000, y: 1600, width: 280, height: 300, dirX: 0.5, dirY: -0.6, strength: 0.3, isTrench: false },
+      { x: 700, y: 1550, width: 350, height: 280, dirX: -0.7, dirY: -0.5, strength: 0.5, isTrench: true },
+      { x: 1400, y: 1300, width: 300, height: 350, dirX: 0.8, dirY: -0.4, strength: 0.45, isTrench: true },
+      { x: 500, y: 1000, width: 250, height: 300, dirX: 0.3, dirY: 0.8, strength: 0.4, isTrench: true }
     ];
     
     currentConfigs.forEach(config => {
@@ -110,18 +113,21 @@ export class Environment {
     const container = this.scene.add.container(config.x, config.y);
     
     const graphics = this.scene.add.graphics();
-    graphics.fillStyle(0x4488cc, 0.08);
+    const fillColor = config.isTrench ? 0x6644aa : 0x4488cc;
+    const fillAlpha = config.isTrench ? 0.12 : 0.08;
+    graphics.fillStyle(fillColor, fillAlpha);
     graphics.fillRect(-config.width / 2, -config.height / 2, config.width, config.height);
     
-    const arrowCount = 6;
+    const arrowCount = config.isTrench ? 10 : 6;
     for (let i = 0; i < arrowCount; i++) {
       const ax = Phaser.Math.Between(-config.width / 2 + 30, config.width / 2 - 30);
       const ay = Phaser.Math.Between(-config.height / 2 + 30, config.height / 2 - 30);
       
-      graphics.lineStyle(2, 0x66bbff, 0.4);
+      const lineColor = config.isTrench ? 0xaa88ff : 0x66bbff;
+      graphics.lineStyle(2, lineColor, 0.5);
       graphics.beginPath();
       
-      const arrowLen = 20;
+      const arrowLen = config.isTrench ? 30 : 20;
       const angle = Math.atan2(config.dirY, config.dirX);
       
       graphics.moveTo(ax, ay);
@@ -131,7 +137,7 @@ export class Environment {
       );
       graphics.strokePath();
       
-      const headLen = 6;
+      const headLen = config.isTrench ? 8 : 6;
       const headAngle = Math.PI / 6;
       graphics.beginPath();
       graphics.moveTo(
@@ -153,6 +159,11 @@ export class Environment {
       graphics.strokePath();
     }
     
+    if (config.isTrench) {
+      graphics.lineStyle(2, 0x8866dd, 0.3);
+      graphics.strokeRect(-config.width / 2, -config.height / 2, config.width, config.height);
+    }
+    
     container.add(graphics);
     container.setDepth(15);
     
@@ -164,7 +175,8 @@ export class Environment {
       height: config.height,
       dirX: config.dirX,
       dirY: config.dirY,
-      strength: config.strength
+      strength: config.strength,
+      isTrench: config.isTrench
     };
   }
   
@@ -278,13 +290,54 @@ export class Environment {
   update(submarine, deltaTime) {
     this.currents.forEach(current => {
       if (this.isInCurrent(submarine, current)) {
-        submarine.applyCurrent(current.dirX, current.dirY, current.strength);
+        const strengthMultiplier = current.isTrench ? GAME_CONFIG.CURRENT_STRENGTH_MULTIPLIER : 1;
+        submarine.applyCurrent(current.dirX, current.dirY, current.strength * strengthMultiplier);
       }
     });
     
     this.lightRays.forEach((ray, index) => {
       ray.sprite.alpha = ray.baseAlpha + Math.sin(this.scene.time.now / 2000 + index) * 0.01;
     });
+  }
+  
+  getCurrentPowerSave(submarine) {
+    let maxSaveRatio = 0;
+    
+    this.currents.forEach(current => {
+      if (this.isInCurrent(submarine, current)) {
+        const subVelMag = Math.sqrt(
+          submarine.velocityX * submarine.velocityX + 
+          submarine.velocityY * submarine.velocityY
+        );
+        
+        if (subVelMag > 10) {
+          const currentMag = Math.sqrt(
+            current.dirX * current.dirX + 
+            current.dirY * current.dirY
+          );
+          
+          const dotProduct = (submarine.velocityX * current.dirX + submarine.velocityY * current.dirY) 
+            / (subVelMag * currentMag);
+          
+          if (dotProduct > 0) {
+            const saveRatio = dotProduct * GAME_CONFIG.CURRENT_POWER_SAVE_RATIO * 
+              (current.isTrench ? 1.5 : 1);
+            maxSaveRatio = Math.max(maxSaveRatio, saveRatio);
+          }
+        }
+      }
+    });
+    
+    return Math.min(maxSaveRatio, 0.7);
+  }
+  
+  isInTrenchCurrent(submarine) {
+    for (const current of this.currents) {
+      if (current.isTrench && this.isInCurrent(submarine, current)) {
+        return true;
+      }
+    }
+    return false;
   }
   
   isInCurrent(submarine, current) {

@@ -23,12 +23,33 @@ export const GAME_CONFIG = {
   LIGHT_RANGE_MAX: 250,
   LIGHT_RANGE_MIN: 80,
   
+  CURRENT_STRENGTH_MULTIPLIER: 2.5,
+  CURRENT_POWER_SAVE_RATIO: 0.6,
+  
+  ANCHOR_GRAB_RANGE: 70,
+  ANCHOR_STABILIZATION_RATIO: 0.85,
+  ANCHOR_ARM_DRAIN_RATE: 0.15,
+  ANCHOR_RETURN_RISK_INCREASE: 0.05,
+  
   TASK_TYPES: {
     CLEAR_OBSTACLE: 'clear_obstacle',
     WELD: 'weld',
     WIRE: 'wire',
-    SAMPLE: 'sample'
+    SAMPLE: 'sample',
+    PIPE_REPAIR: 'pipe_repair',
+    TOWER_REPAIR: 'tower_repair'
   },
+  
+  PIPE_REPAIR_STEPS: [
+    { id: 'clean', name: '清理碎屑', icon: '🧹' },
+    { id: 'align', name: '对准焊点', icon: '🎯' },
+    { id: 'pressure', name: '压力检测', icon: '📊' }
+  ],
+  
+  TOWER_REPAIR_STEPS: [
+    { id: 'rewire', name: '重接线路', icon: '🔌' },
+    { id: 'calibrate', name: '校准频率', icon: '📡' }
+  ],
   
   DANGER_TYPES: {
     DEBRIS: 'debris',

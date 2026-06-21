@@ -3,6 +3,7 @@ import { GAME_CONFIG, COLORS } from '../config/constants.js';
 import { Submarine } from '../entities/Submarine.js';
 import { Task } from '../entities/Task.js';
 import { Hazard } from '../entities/Hazard.js';
+import { Anchor } from '../entities/Anchor.js';
 import { Environment } from '../systems/Environment.js';
 import { LevelBuilder } from '../systems/LevelBuilder.js';
 import { HUD } from '../systems/HUD.js';
@@ -16,6 +17,11 @@ export class GameScene extends Phaser.Scene {
     this.gameState = 'playing';
     this.tasksCompleted = 0;
     this.returnTaskActive = false;
+    this.anchors = [];
+    this.grabbedAnchor = null;
+    this.anchorReturnRisk = 0;
+    this.currentPowerSave = 0;
+    this.totalTaskCount = 4;
   }
   
   create() {
@@ -38,6 +44,7 @@ export class GameScene extends Phaser.Scene {
     
     this.createTasks();
     this.createHazards();
+    this.createAnchors();
     
     this.hud = new HUD(this);
     
@@ -60,30 +67,32 @@ export class GameScene extends Phaser.Scene {
     
     const taskConfigs = [
       {
-        type: GAME_CONFIG.TASK_TYPES.CLEAR_OBSTACLE,
-        x: 800,
+        type: GAME_CONFIG.TASK_TYPES.PIPE_REPAIR,
+        x: 900,
         y: 1700,
-        name: '管道清障'
+        name: '管道裂缝维修'
       },
       {
-        type: GAME_CONFIG.TASK_TYPES.WELD,
-        x: 1300,
-        y: 1450,
-        name: '管道焊接'
-      },
-      {
-        type: GAME_CONFIG.TASK_TYPES.WIRE,
+        type: GAME_CONFIG.TASK_TYPES.TOWER_REPAIR,
         x: 600,
         y: 1100,
-        name: '信号塔接线'
+        name: '信号塔维修'
       },
       {
         type: GAME_CONFIG.TASK_TYPES.SAMPLE,
         x: 2400,
         y: 1750,
         name: '舱段取样'
+      },
+      {
+        type: GAME_CONFIG.TASK_TYPES.CLEAR_OBSTACLE,
+        x: 2000,
+        y: 900,
+        name: '通道清障'
       }
     ];
+    
+    this.totalTaskCount = taskConfigs.length;
     
     taskConfigs.forEach(config => {
       const task = new Task(this, config.type, config.x, config.y, config.name);
@@ -109,6 +118,22 @@ export class GameScene extends Phaser.Scene {
     });
   }
   
+  createAnchors() {
+    this.anchors = [];
+    
+    const anchorConfigs = [
+      { x: 750, y: 1550, name: '海沟锚点A' },
+      { x: 1300, y: 1300, name: '海沟锚点B' },
+      { x: 550, y: 1000, name: '塔基锚点' },
+      { x: 2100, y: 700, name: '岩壁锚点' }
+    ];
+    
+    anchorConfigs.forEach(config => {
+      const anchor = new Anchor(this, config.x, config.y, config.name);
+      this.anchors.push(anchor);
+    });
+  }
+  
   setupInput() {
     this.cursors = this.input.keyboard.createCursorKeys();
     
@@ -118,7 +143,8 @@ export class GameScene extends Phaser.Scene {
       s: Phaser.Input.Keyboard.KeyCodes.S,
       d: Phaser.Input.Keyboard.KeyCodes.D,
       space: Phaser.Input.Keyboard.KeyCodes.SPACE,
-      l: Phaser.Input.Keyboard.KeyCodes.L
+      l: Phaser.Input.Keyboard.KeyCodes.L,
+      e: Phaser.Input.Keyboard.KeyCodes.E
     });
     
     this.cursors.w = this.keys.w;
@@ -135,11 +161,65 @@ export class GameScene extends Phaser.Scene {
       this.stopArmAction();
     });
     
+    this.keys.e.on('down', () => {
+      if (this.gameState !== 'playing') return;
+      this.toggleAnchor();
+    });
+    
     this.keys.l.on('down', () => {
       if (this.gameState !== 'playing') return;
       const isOn = this.submarine.toggleLight();
       this.hud.showMessage(isOn ? '照明灯已开启' : '照明灯已关闭', 1000);
     });
+  }
+  
+  toggleAnchor() {
+    if (this.grabbedAnchor) {
+      this.releaseAnchor();
+    } else {
+      this.tryGrabAnchor();
+    }
+  }
+  
+  tryGrabAnchor() {
+    let nearestAnchor = null;
+    let nearestDistance = Infinity;
+    
+    this.anchors.forEach(anchor => {
+      if (anchor.isInRange(this.submarine)) {
+        const dx = anchor.x - this.submarine.x;
+        const dy = anchor.y - this.submarine.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < nearestDistance) {
+          nearestDistance = dist;
+          nearestAnchor = anchor;
+        }
+      }
+    });
+    
+    if (nearestAnchor && this.submarine.mechanicalArm > 10) {
+      nearestAnchor.grab();
+      this.grabbedAnchor = nearestAnchor;
+      this.submarine.isArmWorking = true;
+      this.submarine.armTarget = { x: nearestAnchor.x, y: nearestAnchor.y, type: 'anchor' };
+      this.hud.showMessage(`已连接 ${nearestAnchor.name}，机身稳定中`, 1500);
+      
+      this.anchorReturnRisk += GAME_CONFIG.ANCHOR_RETURN_RISK_INCREASE;
+    } else if (!nearestAnchor) {
+      this.hud.showMessage('附近没有可用的锚点', 1500);
+    } else {
+      this.hud.showMessage('机械臂耐久不足，无法使用锚点', 1500);
+    }
+  }
+  
+  releaseAnchor() {
+    if (this.grabbedAnchor) {
+      this.grabbedAnchor.release();
+      this.grabbedAnchor = null;
+      this.submarine.isArmWorking = false;
+      this.submarine.armTarget = null;
+      this.hud.showMessage('已断开锚点连接', 1000);
+    }
   }
   
   handleArmAction() {
@@ -172,10 +252,13 @@ export class GameScene extends Phaser.Scene {
   }
   
   stopArmAction() {
-    this.submarine.stopArm();
     if (this.currentTask) {
       this.currentTask.active = false;
       this.currentTask = null;
+    }
+    
+    if (!this.grabbedAnchor) {
+      this.submarine.stopArm();
     }
   }
   
@@ -186,19 +269,44 @@ export class GameScene extends Phaser.Scene {
     
     this.environment.update(this.submarine, delta);
     
+    this.currentPowerSave = this.environment.getCurrentPowerSave(this.submarine);
+    if (this.currentPowerSave > 0) {
+      const powerSaveAmount = GAME_CONFIG.POWER_DRAIN_RATE * this.currentPowerSave * delta / 16;
+      this.submarine.power = Math.min(GAME_CONFIG.POWER_MAX, this.submarine.power + powerSaveAmount);
+    }
+    
+    if (this.grabbedAnchor) {
+      this.applyAnchorStabilization(delta);
+      
+      this.submarine.mechanicalArm -= GAME_CONFIG.ANCHOR_ARM_DRAIN_RATE * delta / 16;
+      if (this.submarine.mechanicalArm <= 0) {
+        this.submarine.mechanicalArm = 0;
+        this.releaseAnchor();
+        this.hud.showMessage('机械臂耐久耗尽，锚点已断开！', 2000);
+      }
+    }
+    
+    this.anchors.forEach(anchor => {
+      anchor.update(delta);
+      
+      const inRange = anchor.isInRange(this.submarine);
+      anchor.showRange(inRange && !this.grabbedAnchor);
+    });
+    
     this.hazards.forEach(hazard => {
       hazard.update(delta);
     });
     
-    if (this.submarine.isArmWorking && this.currentTask) {
+    if (this.submarine.isArmWorking && this.currentTask && !this.grabbedAnchor) {
       this.currentTask.workOnTask(0.5 * delta / 16);
       
       if (this.currentTask.completed) {
         this.stopArmAction();
         this.tasksCompleted++;
-        this.hud.showMessage(`任务完成！剩余 ${4 - this.tasksCompleted} 个任务`, 2000);
+        const remaining = this.totalTaskCount - this.tasksCompleted;
+        this.hud.showMessage(`任务完成！剩余 ${remaining} 个任务`, 2000);
         
-        if (this.tasksCompleted >= 4 && !this.returnTaskActive) {
+        if (this.tasksCompleted >= this.totalTaskCount && !this.returnTaskActive) {
           this.returnTaskActive = true;
           this.hud.showMessage('所有任务完成！返回母船返航！', 3000);
         }
@@ -219,7 +327,12 @@ export class GameScene extends Phaser.Scene {
       this.submarine,
       this.tasks,
       this.hazards,
-      this.levelBuilder.getMotherShipPosition()
+      this.levelBuilder.getMotherShipPosition(),
+      {
+        grabbedAnchor: this.grabbedAnchor,
+        currentPowerSave: this.currentPowerSave,
+        anchorReturnRisk: this.anchorReturnRisk
+      }
     );
     
     if (this.submarine.isDead()) {
@@ -227,6 +340,19 @@ export class GameScene extends Phaser.Scene {
     }
     
     this.updateVisibility();
+  }
+  
+  applyAnchorStabilization(delta) {
+    if (!this.grabbedAnchor) return;
+    
+    const force = this.grabbedAnchor.getStabilizationForce(this.submarine);
+    const body = this.submarine.sprite.body;
+    
+    body.velocity.x += force.x * delta * 2;
+    body.velocity.y += force.y * delta * 2;
+    
+    body.velocity.x *= GAME_CONFIG.ANCHOR_STABILIZATION_RATIO;
+    body.velocity.y *= GAME_CONFIG.ANCHOR_STABILIZATION_RATIO;
   }
   
   checkHazardDamage() {
@@ -283,6 +409,23 @@ export class GameScene extends Phaser.Scene {
   winGame() {
     this.gameState = 'win';
     this.submarine.stopArm();
+    this.releaseAnchor();
+    
+    const returnPenalty = this.calculateReturnPenalty();
+    const hasSecondaryFailure = returnPenalty > 0.1;
+    
+    if (hasSecondaryFailure) {
+      this.submarine.oxygen -= returnPenalty * 20;
+      this.submarine.power -= returnPenalty * 15;
+      
+      if (this.submarine.oxygen <= 0 || this.submarine.power <= 0) {
+        this.hud.showMessage('返航途中发生二次故障！任务失败...', 3000);
+        this.time.delayedCall(2000, () => {
+          this.gameOver();
+        });
+        return;
+      }
+    }
     
     this.cameras.main.fade(1000, 0, 50, 50);
     
@@ -293,8 +436,35 @@ export class GameScene extends Phaser.Scene {
           power: this.submarine.power,
           arm: this.submarine.mechanicalArm
         },
-        tasksCompleted: this.tasksCompleted
+        tasksCompleted: this.tasksCompleted,
+        totalTasks: this.totalTaskCount,
+        taskDetails: this.tasks.map(task => ({
+          name: task.name,
+          completed: task.completed,
+          quality: task.quality || 100,
+          hasSecondaryRisk: task.hasSecondaryFailureRisk || false,
+          isMultiStep: task.isMultiStep || false,
+          stepsCompleted: task.stepsCompleted || 0,
+          totalSteps: task.steps?.length || 0
+        })),
+        returnPenalty: returnPenalty,
+        hasSecondaryFailure: hasSecondaryFailure,
+        anchorReturnRisk: this.anchorReturnRisk
       });
     });
+  }
+  
+  calculateReturnPenalty() {
+    let totalPenalty = 0;
+    
+    this.tasks.forEach(task => {
+      if (task.completed && task.hasSecondaryFailureRisk) {
+        totalPenalty += task.calculateReturnPenalty() * 0.3;
+      }
+    });
+    
+    totalPenalty += this.anchorReturnRisk * 0.5;
+    
+    return Math.min(totalPenalty, 0.8);
   }
 }

@@ -10,6 +10,21 @@ export class Task {
     this.completed = false;
     this.progress = 0;
     this.requiresArm = true;
+    this.isMultiStep = false;
+    this.currentStepIndex = 0;
+    this.steps = [];
+    this.stepsCompleted = 0;
+    this.stepProgress = 0;
+    this.quality = 100;
+    this.hasSecondaryFailureRisk = false;
+    
+    if (type === GAME_CONFIG.TASK_TYPES.PIPE_REPAIR) {
+      this.isMultiStep = true;
+      this.steps = [...GAME_CONFIG.PIPE_REPAIR_STEPS];
+    } else if (type === GAME_CONFIG.TASK_TYPES.TOWER_REPAIR) {
+      this.isMultiStep = true;
+      this.steps = [...GAME_CONFIG.TOWER_REPAIR_STEPS];
+    }
     
     this.createSprite();
   }
@@ -69,6 +84,37 @@ export class Task {
         base.lineStyle(2, 0x00ff88, 0.8);
         base.strokeEllipse(0, 0, 30, 40);
         break;
+        
+      case GAME_CONFIG.TASK_TYPES.PIPE_REPAIR:
+        base.fillStyle(COLORS.PIPE_COLOR, 1);
+        base.fillRect(-40, -18, 80, 36);
+        
+        base.fillStyle(COLORS.PIPE_RUST, 0.6);
+        base.fillRect(-35, -15, 30, 30);
+        
+        base.fillStyle(0xff4400, 0.5);
+        base.fillEllipse(0, 0, 12, 16);
+        
+        base.lineStyle(2, 0xff6600, 0.8);
+        base.strokeRect(-38, -16, 76, 32);
+        break;
+        
+      case GAME_CONFIG.TASK_TYPES.TOWER_REPAIR:
+        base.fillStyle(COLORS.TOWER_COLOR, 1);
+        base.fillRect(-12, -50, 24, 100);
+        
+        base.fillStyle(0x8899aa, 1);
+        base.fillTriangle(-18, -50, 18, -50, 0, -75);
+        
+        base.fillStyle(0xff0000, 0.8);
+        base.fillCircle(0, -60, 6);
+        
+        base.fillStyle(0x334455, 1);
+        base.fillRect(-30, 40, 60, 25);
+        
+        base.lineStyle(2, 0xffff00, 0.6);
+        base.strokeRect(-28, 42, 56, 21);
+        break;
     }
     
     container.add(base);
@@ -83,7 +129,21 @@ export class Task {
     this.progressBar.y = 45;
     container.add(this.progressBar);
     
-    this.nameTag = this.scene.add.text(0, 60, this.name, {
+    this.stepIndicator = this.scene.add.graphics();
+    this.stepIndicator.y = 55;
+    container.add(this.stepIndicator);
+    
+    this.stepText = this.scene.add.text(0, 70, '', {
+      fontSize: '11px',
+      color: '#ffdd00',
+      fontFamily: 'Microsoft YaHei',
+      backgroundColor: 'rgba(0,0,0,0.6)',
+      padding: { x: 4, y: 1 }
+    }).setOrigin(0.5);
+    this.stepText.visible = false;
+    container.add(this.stepText);
+    
+    this.nameTag = this.scene.add.text(0, 90, this.name, {
       fontSize: '14px',
       color: '#ffffff',
       fontFamily: 'Microsoft YaHei',
@@ -99,6 +159,12 @@ export class Task {
   }
   
   getIcon() {
+    if (this.isMultiStep) {
+      if (this.completed) return '✓';
+      const currentStep = this.steps[this.currentStepIndex];
+      return currentStep ? currentStep.icon : '🔧';
+    }
+    
     switch (this.type) {
       case GAME_CONFIG.TASK_TYPES.CLEAR_OBSTACLE:
         return '⛏';
@@ -108,13 +174,26 @@ export class Task {
         return '⚡';
       case GAME_CONFIG.TASK_TYPES.SAMPLE:
         return '🧪';
+      case GAME_CONFIG.TASK_TYPES.PIPE_REPAIR:
+        return '🔧';
+      case GAME_CONFIG.TASK_TYPES.TOWER_REPAIR:
+        return '📡';
       default:
         return '❓';
     }
   }
   
+  getCurrentStep() {
+    if (!this.isMultiStep || this.completed) return null;
+    return this.steps[this.currentStepIndex];
+  }
+  
   updateProgress() {
     this.progressBar.clear();
+    
+    const displayProgress = this.isMultiStep ? 
+      ((this.stepsCompleted + (this.stepProgress / 100)) / this.steps.length) * 100 : 
+      this.progress;
     
     if (this.completed) {
       this.progressBar.fillStyle(0x00ff88, 1);
@@ -122,32 +201,132 @@ export class Task {
       this.progressBar.fillStyle(0xffaa00, 1);
     }
     
-    const width = 40;
+    const width = 60;
     const height = 6;
-    this.progressBar.fillRect(-width / 2, -height / 2, width * (this.progress / 100), height);
+    this.progressBar.fillRect(-width / 2, -height / 2, width * (displayProgress / 100), height);
     
     this.progressBar.lineStyle(1, 0xffffff, 0.5);
     this.progressBar.strokeRect(-width / 2, -height / 2, width, height);
+    
+    if (this.isMultiStep && !this.completed) {
+      this.updateStepIndicator();
+    }
+    
+    if (this.isMultiStep) {
+      const currentStep = this.getCurrentStep();
+      if (currentStep) {
+        this.stepText.visible = true;
+        this.stepText.setText(`步骤 ${this.currentStepIndex + 1}/${this.steps.length}: ${currentStep.name}`);
+      }
+    }
     
     if (this.completed) {
       this.sprite.alpha = 0.6;
       this.icon.setText('✓');
       this.nameTag.setColor('#00ff88');
+      if (this.stepText) {
+        this.stepText.setText('全部完成');
+        this.stepText.setColor('#00ff88');
+      }
+    }
+  }
+  
+  updateStepIndicator() {
+    this.stepIndicator.clear();
+    
+    const stepCount = this.steps.length;
+    const dotSize = 8;
+    const spacing = 18;
+    const startX = -((stepCount - 1) * spacing) / 2;
+    
+    for (let i = 0; i < stepCount; i++) {
+      const x = startX + i * spacing;
+      
+      if (i < this.stepsCompleted) {
+        this.stepIndicator.fillStyle(0x00ff88, 1);
+        this.stepIndicator.fillCircle(x, 0, dotSize / 2);
+      } else if (i === this.currentStepIndex) {
+        this.stepIndicator.fillStyle(0xffdd00, 1);
+        this.stepIndicator.fillCircle(x, 0, dotSize / 2);
+        
+        const pulse = 1 + Math.sin(this.scene.time.now / 200) * 0.3;
+        this.stepIndicator.lineStyle(2, 0xffdd00, 0.5);
+        this.stepIndicator.strokeCircle(x, 0, (dotSize / 2) * pulse + 3);
+      } else {
+        this.stepIndicator.fillStyle(0x555555, 1);
+        this.stepIndicator.fillCircle(x, 0, dotSize / 2);
+      }
     }
   }
   
   workOnTask(amount) {
     if (this.completed) return false;
     
-    this.progress += amount;
-    if (this.progress >= 100) {
-      this.progress = 100;
-      this.completed = true;
-      this.onComplete();
+    if (this.isMultiStep) {
+      this.stepProgress += amount;
+      
+      if (this.stepProgress >= 100) {
+        this.completeCurrentStep();
+      }
+    } else {
+      this.progress += amount;
+      if (this.progress >= 100) {
+        this.progress = 100;
+        this.completed = true;
+        this.onComplete();
+      }
     }
     
     this.updateProgress();
     return true;
+  }
+  
+  completeCurrentStep() {
+    this.stepProgress = 0;
+    this.stepsCompleted++;
+    
+    if (this.stepsCompleted >= this.steps.length) {
+      this.completed = true;
+      this.quality = 100;
+      this.hasSecondaryFailureRisk = false;
+      this.onComplete();
+    } else {
+      this.currentStepIndex++;
+      this.scene.tweens.add({
+        targets: this.sprite,
+        scale: 1.15,
+        duration: 200,
+        yoyo: true
+      });
+      
+      const stepParticles = this.scene.add.circle(this.x, this.y, 15, 0x00ff88, 0.6);
+      this.scene.tweens.add({
+        targets: stepParticles,
+        scale: 2,
+        alpha: 0,
+        duration: 500,
+        onComplete: () => stepParticles.destroy()
+      });
+    }
+  }
+  
+  skipToNextStep() {
+    if (this.completed) return false;
+    if (this.stepsCompleted >= this.steps.length - 1) return false;
+    
+    this.stepProgress = 0;
+    this.stepsCompleted++;
+    this.currentStepIndex++;
+    this.hasSecondaryFailureRisk = true;
+    this.quality = Math.max(0, this.quality - 30);
+    
+    this.updateProgress();
+    return true;
+  }
+  
+  calculateReturnPenalty() {
+    if (!this.hasSecondaryFailureRisk) return 0;
+    return (100 - this.quality) / 100;
   }
   
   onComplete() {
@@ -158,20 +337,20 @@ export class Task {
       yoyo: true
     });
     
-    for (let i = 0; i < 10; i++) {
-      this.scene.time.delayedCall(i * 50, () => {
+    for (let i = 0; i < 15; i++) {
+      this.scene.time.delayedCall(i * 40, () => {
         const particle = this.scene.add.circle(
-          this.x + Phaser.Math.Between(-20, 20),
-          this.y + Phaser.Math.Between(-20, 20),
-          Phaser.Math.Between(2, 6),
-          0x00ff88,
+          this.x + Phaser.Math.Between(-25, 25),
+          this.y + Phaser.Math.Between(-25, 25),
+          Phaser.Math.Between(3, 7),
+          this.hasSecondaryFailureRisk ? 0xffaa00 : 0x00ff88,
           0.8
         );
         this.scene.tweens.add({
           targets: particle,
-          y: particle.y - 50,
+          y: particle.y - 60,
           alpha: 0,
-          duration: 800,
+          duration: 900,
           onComplete: () => particle.destroy()
         });
       });
